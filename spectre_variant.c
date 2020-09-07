@@ -18,38 +18,117 @@
 /********************************************************************
 Victim code.
 ********************************************************************/
-unsigned int array1_size = 16;
-uint8_t unused1[LINE];
-uint8_t array1[WAY * SET * LINE] = { /* L1 Cache Size */
-  1,
-  2,
-  3,
-  4,
-  5,
-  6,
-  7,
-  8,
-  9,
-  10,
-  11,
-  12,
-  13,
-  14,
-  15,
-  16 // array1[15]
-};
+//unsigned int array1_size = 16;
+//uint8_t unused1[LINE];
+//uint8_t array1[WAY * SET * LINE] = { /* L1 Cache Size */
+//  1,
+//  2,
+//  3,
+//  4,
+//  5,
+//  6,
+//  7,
+//  8,
+//  9,
+//  10,
+//  11,
+//  12,
+//  13,
+//  14,
+//  15,
+//  16 // array1[15]
+//};
 // array1[16] : time1
 // array1[17] : time2
 // array1[18] : i
 // array1[19] : j
 // array1[20] : junk
 // array1[21] : addr
-uint8_t unused2[LINE];
-uint8_t array2[WAY * SET * LINE];
+//uint8_t unused2[LINE];
+uint8_t array2[WAY * SET * LINE] = {
+//	//		0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+/*000*/   '\n', '\0',  'w',  'a',  'y',  ' ', '\0',  'i',  'n',  'd',  ' ', '\0',  ',',  ' ',  'a',  'd',
+/*001*/	   'd',  'r',  ' ', '\0',  ',',  ' ',  't',  'i',  'm',  'e',  ' ', '\0',  ' ',  'h',  'i',  't',
+/*002*/   '\0',  ' ',  'm',  'i',  's',  's', '\0'
+/*003*/
+/*004*/
+/*005*/
+/*006*/
+/*007*/
+
+/*010*/
+/*011*/
+/*012*/
+/*013*/
+/*014*/
+/*015*/
+/*016*/
+/*017*/
+
+/*020*/
+/*021*/
+/*022*/
+/*023*/
+/*024*/
+/*025*/
+/*026*/
+/*027*/
+
+/*030*/
+/*031*/
+/*032*/
+/*033*/
+/*034*/
+/*035*/
+/*036*/
+/*037*/
+
+/*040*/
+/*041*/
+/*042*/
+/*043*/
+/*044*/
+/*045*/
+/*046*/
+/*047*/
+
+/*050*/
+/*051*/
+/*052*/
+/*053*/
+/*054*/
+/*055*/
+/*056*/
+/*057*/
+
+/*060*/
+/*061*/
+/*062*/
+/*063*/
+/*064*/
+/*065*/
+/*066*/
+/*067*/
+
+/*070*/
+/*071*/
+/*072*/
+/*073*/
+/*074*/
+/*075*/
+/*076*/
+/*077*/
+
+
+
+
+
+
+};
 
 char * secret = "The Magic Words are Squeamish Ossifrage.";
 
-uint8_t temp = 0; /* Used so compiler won’t optimize out victim_function() */
+//uint8_t temp = 0; /* Used so compiler won’t optimize out victim_function() */
 
 
 /********************************************************************
@@ -61,9 +140,10 @@ Analysis code
 
 int main (int argc, const char ** argv) {
 	volatile uint8_t *addr;
-	int i,j,junk, time1,time2 = 0;
+	uint8_t i,j = 0;
+	int junk, time1,time2 = 0;
 	
-	printf("flushing...\n");
+	//printf("flushing...\n");
 	
 	//flushing
 	for(i = 0 ; i < WAY ; i++){
@@ -73,8 +153,8 @@ int main (int argc, const char ** argv) {
 		//printf("set%02d time is %d\n",array1[18],array1[17]);
 	}
 
-	printf("prime\n");
-
+	//printf("prime\n");
+	printf("%d",i);
 	for(i = 0 ; i < 6 ; i++){
 		printf("way %02d\n", i);
 		for(j = 0 ; j < INDICES ; j++){
@@ -90,7 +170,7 @@ int main (int argc, const char ** argv) {
 		//printf("set%02d time is %d\n",array1[18],array1[17]);
 	}
 
-	printf("probe\n");
+	//printf("probe\n");
 
 	for(i = 0 ; i < WAY ; i++){
 		printf("way %02d\n", i);
